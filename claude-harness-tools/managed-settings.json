@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "deny": [
+      "mcp__miniflux__delete_*",
+      "mcp__miniflux__delete_api_key",
+      "mcp__miniflux__delete_category",
+      "mcp__miniflux__delete_feed",
+      "mcp__miniflux__delete_user",
+      "mcp__miniflux__flush_history",
+      "mcp__miniflux__create_api_key",
+      "mcp__miniflux__get_api_keys",
+      "mcp__miniflux__create_user",
+      "mcp__miniflux__update_user",
+      "mcp__miniflux__mark_all_as_read",
+      "mcp__miniflux__mark_category_as_read",
+      "mcp__miniflux__mark_feed_as_read"
+    ]
+  }
+}
