@@ -2,7 +2,7 @@ name: claude-harness-tools
 
 on:
   push:
-    branches: [main]
+    branches: [master]
     paths:
       - claude-harness-tools/**
       - .github/workflows/claude-harness-tools.yaml
