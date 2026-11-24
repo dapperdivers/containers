@@ -7,9 +7,11 @@ homelab, published to `ghcr.io/dapperdivers/<name>`.
 |---|---|---|
 | `miniflux-mcp` | [tssujt/miniflux-mcp](https://github.com/tssujt/miniflux-mcp) at a pinned tag | The upstream image runs as root and is published from an unrelated Docker Hub account. Ours is built from source, non-root, on a digest-pinned distroless base. |
 | `claude-harness-tools` | kagent's `claude-harness` image at a pinned digest | The stock harness has no `curl`, `jq` or `python3`, which agent skills expect, and no way to ship a Claude Code policy. Ours adds both and changes nothing else. |
+| `vault-mcp` | [MCPVault](https://www.npmjs.com/package/@bitbonsai/mcpvault) and [supergateway](https://www.npmjs.com/package/supergateway) from npm at pinned versions | MCPVault only speaks stdio, so supergateway serves it over HTTP. The cluster used to download both with `npx` at every pod start; this bakes them in, non-root, with no writable path needed. |
 
 Each image lives in its own directory with a `Dockerfile` and a workflow in
-`.github/workflows/`. Tags are the upstream version, never `latest`.
+`.github/workflows/`. Tags are the upstream version, never `latest`. `vault-mcp` packages
+two upstream versions, so its tag is the build date and run number (`2026.11.24.1`).
 
 ## claude-harness-tools
 
