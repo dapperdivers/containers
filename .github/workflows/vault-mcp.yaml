@@ -1,0 +1,130 @@
+name: vault-mcp
+
+# Pull requests: build the image and start it once the way the cluster does.
+# Push to main: the same, then push it to ghcr.io. The tag and digest to pin are in the
+# job summary.
+
+on:
+  pull_request:
+    paths:
+      - vault-mcp/**
+      - .github/workflows/vault-mcp.yaml
+  push:
+    branches: [main]
+    paths:
+      - vault-mcp/**
+      - .github/workflows/vault-mcp.yaml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  IMAGE: ghcr.io/dapperdivers/vault-mcp
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build (not pushed)
+        uses: docker/build-push-action@v6
+        with:
+          context: vault-mcp
+          load: true
+          provenance: false
+          tags: vault-mcp:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Same constraints as the pod: uid 1000, read-only root filesystem with no writable
+      # path, vault mounted read-only. An excluded folder must stay out of search results.
+      - name: Smoke test
+        run: |
+          vault="$(mktemp -d)"
+          mkdir -p "${vault}/Notes" "${vault}/Private"
+          printf '# Greenhouse\nTomatoes go in after the last frost.\n' > "${vault}/Notes/Greenhouse.md"
+          printf '# Hidden\nTomatoes that must not be found.\n' > "${vault}/Private/Hidden.md"
+          chmod -R a+rX "${vault}"
+          docker run --detach --name smoke --read-only --user 1000:1000 \
+            --cap-drop ALL --security-opt no-new-privileges \
+            --env SUPERGATEWAY_API_KEY=smoke --volume "${vault}:/vault:ro" \
+            --publish 127.0.0.1:8000:8000 vault-mcp:ci \
+            --stdio "mcpvault /vault --read-only --exclude Private" \
+            --outputTransport streamableHttp --port 8000 --healthEndpoint /healthz
+          for _ in $(seq 1 30); do
+            curl --silent --fail http://127.0.0.1:8000/healthz > /dev/null && break
+            sleep 1
+          done
+          post() {
+            curl --silent --max-time 30 --header "Content-Type: application/json" \
+              --header "Accept: application/json, text/event-stream" "$@" http://127.0.0.1:8000/mcp
+          }
+          test "$(post --output /dev/null --write-out '%{http_code}' --data '{"jsonrpc":"2.0","id":1,"method":"tools/list"}')" = 401
+          auth="Authorization: Bearer smoke"
+          post --dump-header headers.txt --header "${auth}" --output /dev/null \
+            --data '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"ci","version":"1"}}}'
+          session="$(grep -i '^mcp-session-id' headers.txt | tr -d '\r' | awk '{print $2}')"
+          post --header "${auth}" --header "Mcp-Session-Id: ${session}" --output /dev/null \
+            --data '{"jsonrpc":"2.0","method":"notifications/initialized"}'
+          found="$(post --header "${auth}" --header "Mcp-Session-Id: ${session}" \
+            --data '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"search_notes","arguments":{"query":"tomatoes"}}}')"
+          echo "${found}"
+          echo "${found}" | grep --quiet 'Notes/Greenhouse.md'
+          if echo "${found}" | grep --quiet 'Hidden'; then echo "excluded folder was searched"; exit 1; fi
+          tools="$(post --header "${auth}" --header "Mcp-Session-Id: ${session}" --data '{"jsonrpc":"2.0","id":3,"method":"tools/list"}')"
+          if echo "${tools}" | grep --quiet --extended-regexp '"name":"(write_note|delete_note|move_note|patch_note)"'; then
+            echo "--read-only did not drop the write tools"; exit 1
+          fi
+          docker rm --force smoke
+
+      - name: Work out the tag
+        id: tag
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        run: |
+          # Two upstream versions go into this image, so the tag is the build date and run
+          # number (dots only: Renovate reads a "-suffix" as a variant).
+          echo "build=$(date -u +%Y.%m.%d).${GITHUB_RUN_NUMBER}" >> "${GITHUB_OUTPUT}"
+
+      - uses: docker/login-action@v3
+        if: steps.tag.outputs.build != ''
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push
+        id: push
+        if: steps.tag.outputs.build != ''
+        uses: docker/build-push-action@v6
+        with:
+          context: vault-mcp
+          push: true
+          # One plain image manifest, so the digest below is the image itself.
+          provenance: false
+          tags: ${{ env.IMAGE }}:${{ steps.tag.outputs.build }}
+          cache-from: type=gha
+
+      - name: Summary
+        if: steps.tag.outputs.build != ''
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+          BUILD: ${{ steps.tag.outputs.build }}
+        run: |
+          {
+            echo "### Pushed ${IMAGE}"
+            echo
+            echo '```yaml'
+            echo "repository: ${IMAGE}"
+            echo "tag: ${BUILD}@${DIGEST}"
+            echo '```'
+          } >> "${GITHUB_STEP_SUMMARY}"
