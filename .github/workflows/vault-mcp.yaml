@@ -1,7 +1,7 @@
 name: vault-mcp
 
 # Pull requests: build the image and start it once the way the cluster does.
-# Push to main: the same, then push it to ghcr.io. The tag and digest to pin are in the
+# Push to master (the default branch): the same, then push it to ghcr.io. The tag and digest to pin are in the
 # job summary.
 
 on:
@@ -10,7 +10,7 @@ on:
       - vault-mcp/**
       - .github/workflows/vault-mcp.yaml
   push:
-    branches: [main]
+    branches: [master]
     paths:
       - vault-mcp/**
       - .github/workflows/vault-mcp.yaml
@@ -89,7 +89,7 @@ jobs:
 
       - name: Work out the tag
         id: tag
-        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
         run: |
           # Two upstream versions go into this image, so the tag is the build date and run
           # number (dots only: Renovate reads a "-suffix" as a variant).
