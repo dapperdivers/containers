@@ -1,0 +1,47 @@
+{
+  $schema: "https://docs.renovatebot.com/renovate-schema.json",
+  // Renovate is run for this repository from dapper-cluster's "Renovate (image repos)"
+  // workflow; there is no Renovate workflow here.
+  extends: [
+    "github>home-operations/renovate-presets#12.0.0",
+    ":semanticCommits",
+    ":timezone(America/New_York)",
+  ],
+  // Only vault-mcp is managed. Its workflow builds and smoke-tests every pull request, so
+  // an update can be merged on a green check. The other images are left alone on purpose:
+  // claude-harness-tools must follow the kagent release that is running (see the README),
+  // and miniflux-mcp has no pull-request build to test an update with.
+  includePaths: ["vault-mcp/**", ".github/workflows/vault-mcp.yaml"],
+  // Renovate merges once the pull request's build passes. Not GitHub's own auto-merge:
+  // this repository has no required checks, so that would merge at once.
+  platformAutomerge: false,
+  rebaseWhen: "conflicted",
+  customManagers: [
+    {
+      description: "ARG lines in a Dockerfile annotated with '# renovate: datasource=... depName=...'",
+      customType: "regex",
+      managerFilePatterns: ["/(^|/)Dockerfile$/"],
+      matchStrings: [
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\nARG \\S+?=(?<currentValue>\\S+)",
+      ],
+    },
+  ],
+  packageRules: [
+    {
+      description: "Auto-merge minor, patch and digest updates after a three-day soak",
+      // A merge publishes a new image, which the cluster then picks up and deploys on its
+      // own. The soak leaves time for a bad upstream release to be pulled.
+      matchUpdateTypes: ["minor", "patch", "digest", "pinDigest"],
+      automerge: true,
+      automergeType: "pr",
+      minimumReleaseAge: "3 days",
+      ignoreTests: false,
+    },
+    {
+      description: "0.x minors are breaking releases under semver (MCPVault is 0.x): review by hand",
+      matchCurrentVersion: "/^v?0\\./",
+      matchUpdateTypes: ["minor"],
+      automerge: false,
+    },
+  ],
+}
