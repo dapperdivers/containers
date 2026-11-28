@@ -16,7 +16,7 @@ FROM node:26.13.1-alpine@sha256:6bd9ab43c0ec0190ca7b2d193906cb8b7edf6e7f4afa43dd
 # renovate: datasource=npm depName=@bitbonsai/mcpvault
 ARG MCPVAULT_VERSION=0.18.4
 # renovate: datasource=npm depName=supergateway
-ARG SUPERGATEWAY_VERSION=4.2.4
+ARG SUPERGATEWAY_VERSION=4.3.0
 
 LABEL org.opencontainers.image.source="https://github.com/dapperdivers/containers" \
       org.opencontainers.image.description="MCPVault served over Streamable HTTP by supergateway, non-root" \
